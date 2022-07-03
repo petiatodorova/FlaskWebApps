@@ -66,6 +66,12 @@ class ColorEnum(enum.Enum):
     yellow = "yellow"
 
 
+class UserRole(enum.Enum):
+    user = "User"
+    admin = "Admin"
+    super_admin = "Super Admin"
+
+
 class SingleClothSchema(Schema):
     id = fields.Integer()
     name = fields.String()
@@ -116,6 +122,7 @@ class User(db.Model):
     create_on = db.Column(db.DateTime, server_default=func.now())
     updated_on = db.Column(db.DateTime, onupdate=func.now())
     clothes = db.relationship("Clothes", secondary=users_clothes)
+    role = db.Column(db.Enum(UserRole), default=UserRole.user, nullable=False)
 
     def encode_token(self):
         payload = {"exp": datetime.utcnow() + timedelta(days=2), "sub": self.id}
@@ -159,8 +166,8 @@ class UserResource(Resource):
 class ClothesRouter(Resource):
     @auth.login_required
     def get(self):
-        clothes = Clothes.query.all()
-        return {"data": [SingleClothSchema().dump(c) for c in clothes]}, 200
+        current_user = auth.current_user()
+        return UserOutShema().dump(current_user)
 
 
 api.add_resource(SignUp, "/register/")
