@@ -12,7 +12,7 @@ from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
-from werkzeug.exceptions import BadRequest
+from werkzeug.exceptions import BadRequest, Forbidden
 from werkzeug.security import generate_password_hash
 
 app = Flask(__name__)
@@ -48,6 +48,28 @@ def verify_token(token):
         raise BadRequest("Token expired!")
     except Exception as ex:
         raise ex
+
+
+def permission_required(role):
+    def decorator(func):
+        def decorated_function(*args, **kwargs):
+            current_user = auth.current_user()
+            if current_user.role == role:
+                return func(*args, **kwargs)
+            raise Forbidden("You don't have permissions to access this resource!")
+        return decorated_function
+    return decorator
+
+
+def permission_admin_required(role):
+    def decorator(func):
+        def decorated_function(*args, **kwargs):
+            current_user = auth.current_user()
+            if current_user.role in [UserRole.admin, UserRole.super_admin]:
+                return func(*args, **kwargs)
+            raise Forbidden("You don't have permissions to access this resource!")
+        return decorated_function
+    return decorator
 
 
 class SizeEnum(enum.Enum):
@@ -122,7 +144,7 @@ class User(db.Model):
     create_on = db.Column(db.DateTime, server_default=func.now())
     updated_on = db.Column(db.DateTime, onupdate=func.now())
     clothes = db.relationship("Clothes", secondary=users_clothes)
-    role = db.Column(db.Enum(UserRole), default=UserRole.user, nullable=False)
+    role = db.Column(db.Enum(UserRole), server_default=UserRole.user.name, nullable=False)
 
     def encode_token(self):
         payload = {"exp": datetime.utcnow() + timedelta(days=2), "sub": self.id}
@@ -165,9 +187,9 @@ class UserResource(Resource):
 
 class ClothesRouter(Resource):
     @auth.login_required
+    @permission_required(UserRole.user)
     def get(self):
-        current_user = auth.current_user()
-        return UserOutShema().dump(current_user)
+        return UserOutShema().dump(auth.current_user())
 
 
 api.add_resource(SignUp, "/register/")
