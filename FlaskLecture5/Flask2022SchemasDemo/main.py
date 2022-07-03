@@ -72,6 +72,19 @@ def permission_admin_required(role):
     return decorator
 
 
+def validate_schema(schema_name):
+    def decorator(func):
+        def decorated_function(*args, **kwargs):
+            data = request.get_json()
+            schema = schema_name()
+            errors = schema.validate(data)
+            if errors:
+                raise BadRequest(errors)
+            return func(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
 class SizeEnum(enum.Enum):
     xs = "xs"
     s = "s"
@@ -122,7 +135,6 @@ class UserSignInSchema(Schema):
             raise ValidationError(
                 "Full name should consists of first and last name at least"
             )
-
         if len(first_name) < 3 or len(last_name) < 3:
             raise ValueError("Name should be at least 3 characters")
 
@@ -165,18 +177,15 @@ class Clothes(db.Model):
 
 
 class SignUp(Resource):
+    @validate_schema(UserSignInSchema)
     def post(self):
         data = request.get_json()
-        schema = UserSignInSchema()
-        errors = schema.validate(data)
-        if not errors:
-            data["password"] = generate_password_hash(data['password'], method='sha256')
-            user = User(**data)
-            db.session.add(user)
-            db.session.commit()
-            token = user.encode_token()
-            return {"token": token}, 201
-        return errors, 400
+        data["password"] = generate_password_hash(data['password'], method='sha256')
+        user = User(**data)
+        db.session.add(user)
+        db.session.commit()
+        token = user.encode_token()
+        return {"token": token}, 201
 
 
 class UserResource(Resource):
